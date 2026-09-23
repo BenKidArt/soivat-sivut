@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <clipPath id="c"><rect width="512" height="512" rx="112"/></clipPath>
+    <radialGradient id="g" cx="40%" cy="35%" r="60%">
+      <stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#ffe066"/><stop offset="1" stop-color="#ff9f1c"/>
+    </radialGradient>
+  </defs>
+  <g clip-path="url(#c)">
+    <rect width="512" height="512" fill="#ff7eb6"/>
+    <g transform="translate(256 256)" fill="#ffb3d4">
+      <path id="r" d="M0 0 L-60 -400 L60 -400 Z"/>
+      <use href="#r" transform="rotate(40)"/><use href="#r" transform="rotate(80)"/><use href="#r" transform="rotate(120)"/>
+      <use href="#r" transform="rotate(160)"/><use href="#r" transform="rotate(200)"/><use href="#r" transform="rotate(240)"/>
+      <use href="#r" transform="rotate(280)"/><use href="#r" transform="rotate(320)"/>
+    </g>
+    <circle cx="256" cy="256" r="170" fill="url(#g)"/>
+    <g fill="#7b2ff7">
+      <rect x="276" y="140" width="26" height="190" rx="10"/>
+      <path d="M290 140 C330 150 360 180 352 230 C340 200 320 190 300 186 Z"/>
+      <ellipse cx="244" cy="334" rx="58" ry="44" transform="rotate(-20 244 334)"/>
+    </g>
+  </g>
+</svg>

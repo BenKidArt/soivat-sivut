@@ -1,0 +1,16 @@
+{
+  "name": "Soivat Sivut – lasten musiikkikirja",
+  "short_name": "Soivat Sivut",
+  "description": "Värikäs musiikkikirja lapsille: paina soitinta ja kuuntele.",
+  "lang": "fi",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#ff7eb6",
+  "theme_color": "#ff7eb6",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
