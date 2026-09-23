@@ -1,7 +1,10 @@
 // Offline-tuki: sovellus toimii ilman verkkoa ensimmäisen käynnin jälkeen.
 // Vaihda versionumeroa, kun julkaiset muutoksia.
-const CACHE = 'soivat-sivut-v2';
-const FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'soivat-sivut-v3';
+const FILES = [
+  './', './index.html', './style.css', './manifest.webmanifest', './icon.svg',
+  './js/audio.js', './js/animals.js', './js/music.js', './js/visuals.js', './js/app.js',
+];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
@@ -14,17 +17,16 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
+// Verkko ensin, jotta päivitykset näkyvät heti; ilman verkkoa käytetään välimuistia
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
-  // Sivu itse: verkko ensin (päivitykset näkyvät heti), muuten välimuisti
-  if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(res => {
+  e.respondWith(fetch(req).then(res => {
+    if (res.ok) {
       const copy = res.clone();
-      caches.open(CACHE).then(c => c.put('./index.html', copy));
-      return res;
-    }).catch(() => caches.match('./index.html')));
-    return;
-  }
-  e.respondWith(caches.match(req).then(hit => hit || fetch(req)));
+      caches.open(CACHE).then(c => c.put(req, copy));
+    }
+    return res;
+  }).catch(() => caches.match(req, { ignoreSearch: true })
+    .then(hit => hit || (req.mode === 'navigate' ? caches.match('./index.html') : undefined))));
 });
