@@ -29,7 +29,7 @@ function makeFloater(anywhere) {
     x: rand(0, W), y: anywhere ? rand(0, H) : H + 40,
     s: rand(8, 24), rot: rand(0, 6.28), vr: rand(-1.2, 1.2),
     vy: rand(-45, -15), sway: rand(0, 6.28), shape: pick(SHAPES),
-    h: rand(0, 360), a: rand(.25, .55),
+    h: rand(0, 360), a: rand(.08, .2),
   };
 }
 
@@ -191,6 +191,6 @@ function frame(now) {
 function startVisuals() {
   resize();
   window.addEventListener('resize', resize);
-  for (let i = 0; i < (reduceMotion ? 8 : 22); i++) floaters.push(makeFloater(true));
+  for (let i = 0; i < (reduceMotion ? 4 : 12); i++) floaters.push(makeFloater(true));
   requestAnimationFrame(frame);
 }

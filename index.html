@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0018">
-<meta name="description" content="Biittipad – tee phonkia, technoa, housea, trappia, drum & bassia ja lo-fia koskettamalla.">
+<meta name="theme-color" content="#07000f">
+<meta name="description" content="Biittipad – tee ja tallenna phonkia, technoa, housea, trappia, drum & bassia ja lo-fia koskettamalla.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Biittipad</title>
@@ -12,7 +12,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -24,21 +24,25 @@
 <main id="app" class="screen">
   <header class="top">
     <div class="brand">BIITTI<b>PAD</b></div>
-    <div class="group">
+    <div class="transport">
+      <button class="bpmbox" id="bpmBox" aria-label="Tempo – avaa studio"><b id="bpmVal">132</b><small>BPM</small></button>
+      <div class="meter" id="masterMeter" aria-hidden="true"><i></i><i></i></div>
+      <button class="recbtn" id="recBtn" aria-label="Tallenna"><span class="dot"></span><span id="recTime">REC</span></button>
       <button class="iconbtn" id="jamBtn" aria-label="Arvo biitti">🎲</button>
       <button class="iconbtn stopall" id="stopBtn" aria-label="Pysäytä kaikki" hidden>⏹</button>
-      <button class="iconbtn" id="muteBtn" aria-label="Ääni päälle tai pois">🔊</button>
     </div>
   </header>
   <nav class="genres" id="genres" aria-label="Tyyli"></nav>
-  <div class="main">
+
+  <!-- ─── PADS ─── -->
+  <section class="view main" id="view-pads">
     <div class="left">
       <div class="viz" id="vizbox">
         <canvas id="viz"></canvas>
         <div class="vizinfo">
           <span class="gname" id="gname"></span>
-          <span class="bpm" id="bpmLabel"></span>
           <span class="beats" id="beats"><i></i><i></i><i></i><i></i></span>
+          <span class="midi" id="midiTag" hidden>MIDI</span>
         </div>
         <div class="hint" id="hint">Napauta pädejä ja rakenna biitti 👇</div>
       </div>
@@ -60,18 +64,72 @@
         <button class="fxbtn" data-fx="break" style="--h:0">BREAK</button>
       </div>
     </div>
-  </div>
+  </section>
+
+  <!-- ─── STUDIO ─── -->
+  <section class="view studio" id="view-studio" hidden>
+    <div class="globals">
+      <div class="ctl">
+        <label>TEMPO</label>
+        <div class="stepper">
+          <button data-step="tempo" data-d="-1" aria-label="Hitaammin">−</button>
+          <output id="tempoOut">132</output>
+          <button data-step="tempo" data-d="1" aria-label="Nopeammin">+</button>
+        </div>
+        <button class="tap" id="tapBtn">TAP</button>
+      </div>
+      <div class="ctl">
+        <label>SÄVELLAJI</label>
+        <div class="stepper">
+          <button data-step="key" data-d="-1" aria-label="Alemmas">−</button>
+          <output id="keyOut">0</output>
+          <button data-step="key" data-d="1" aria-label="Ylemmäs">+</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <label>SWING <output id="swingOut">0%</output></label>
+        <input type="range" id="swing" min="0" max="50" step="1" value="0">
+      </div>
+      <div class="ctl">
+        <label>DRIVE <output id="driveOut">20%</output></label>
+        <input type="range" id="drive" min="0" max="100" step="1" value="20">
+      </div>
+      <div class="ctl">
+        <label>REVERB</label>
+        <div class="seg" id="revSeg"></div>
+      </div>
+    </div>
+    <div class="mixer" id="mixer"></div>
+  </section>
+
+  <!-- ─── TALLENTEET ─── -->
+  <section class="view recs" id="view-recs" hidden>
+    <div class="recintro">
+      <p>Paina <b>● REC</b> ylhäältä, soita ja paina uudestaan. Tallenne tallentuu tähän häviöttömänä WAV-tiedostona.</p>
+    </div>
+    <ul class="reclist" id="recList"></ul>
+  </section>
+
+  <nav class="tabs" id="tabs">
+    <button data-view="pads" class="on"><span class="art">🎛️</span>PADS</button>
+    <button data-view="studio"><span class="art">🎚️</span>STUDIO</button>
+    <button data-view="recs"><span class="art">💾</span>TALLENTEET<i id="recCount" hidden></i></button>
+  </nav>
 </main>
 
-<div id="start"><button aria-label="Aloita"><span class="play"></span></button><p>BIITTIPAD</p></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="start"><button aria-label="Aloita"><span class="play"></span></button><p>BIITTIPAD</p><small>STUDIO · LAUNCHPAD · REC</small></div>
 
 <canvas id="fx"></canvas>
 
+<script src="js/engine.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/vox.js"></script>
 <script src="js/genres.js"></script>
 <script src="js/sequencer.js"></script>
+<script src="js/recorder.js"></script>
 <script src="js/visuals.js"></script>
+<script src="js/studio.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -1,216 +1,5 @@
 'use strict';
-/* ════════════════════ Äänimoottori: kaikki äänet syntetisoidaan Web Audio API:lla ════════════════════ */
-
-let ctx = null, master = null, noiseBuf = null;
-let muted = false;
-let FX = null;           // DJ-efektit, väylät ja analysaattori
-let NODES = null;        // pitkän painalluksen aikana kerätyt äänilähteet
-
-const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
-const rand = (a, b) => a + Math.random() * (b - a);
-const pick = a => a[Math.floor(Math.random() * a.length)];
-
-/*
- * Signaaliketju:
- *   rummut → drumBus ─┐
- *   muut  → musicBus → pump (sidechain) ─┴→ master → [kaiku, reverb] → LPF → HPF → gate → vol → limitteri → ulos
- */
-function audio() {
-  if (!ctx) {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return null;
-    ctx = new AC();
-    const limiter = ctx.createDynamicsCompressor();
-    limiter.threshold.value = -9;
-    limiter.knee.value = 6;
-    limiter.ratio.value = 10;
-    limiter.attack.value = .003;
-    limiter.release.value = .2;
-    limiter.connect(ctx.destination);
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = .72;
-    limiter.connect(analyser);
-
-    const vol = gainNode(muted ? 0 : .9, limiter);
-    const gate = gainNode(1, vol);
-    const hpf = biquad('highpass', 10, .7); hpf.connect(gate);
-    const lpf = biquad('lowpass', 20000, .7); lpf.connect(hpf);
-    const fxIn = gainNode(1, lpf);
-    master = gainNode(.8, fxIn);
-
-    const verb = ctx.createConvolver();
-    verb.buffer = impulse(2.2);
-    const verbSend = gainNode(.12, verb);
-    verb.connect(fxIn);
-    master.connect(verbSend);
-
-    // Tempoon synkattu kaiku (pisteellinen kahdeksasosa)
-    const delay = ctx.createDelay(2);
-    const tone = biquad('lowpass', 3200, .5);
-    const fb = gainNode(.42, delay);
-    delay.connect(tone);
-    tone.connect(fb);
-    tone.connect(fxIn);
-    const delayIn = gainNode(1, delay);
-    const echoSend = gainNode(0, delayIn);
-    master.connect(echoSend);
-
-    const drumBus = gainNode(1, master);
-    const pump = gainNode(1, master);
-    const musicBus = gainNode(1, pump);
-
-    FX = { vol, gate, hpf, lpf, delay, delayIn, echoSend, analyser, drumBus, musicBus, pump, gateLfo: null };
-    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  }
-  if (ctx.state !== 'running') ctx.resume();
-  return ctx;
-}
-
-function gainNode(value, dest) {
-  const g = ctx.createGain();
-  g.gain.value = value;
-  if (dest) g.connect(dest);
-  return g;
-}
-
-function impulse(sec) {
-  const len = Math.floor(ctx.sampleRate * sec);
-  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let c = 0; c < 2; c++) {
-    const d = buf.getChannelData(c);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
-  }
-  return buf;
-}
-
-function setMasterMuted(m) {
-  muted = m;
-  if (FX) FX.vol.gain.setTargetAtTime(m ? 0 : .9, ctx.currentTime, .03);
-}
-
-/* ─── Rakennuspalikat ─── */
-
-function track(node) {
-  if (NODES) NODES.push(node);
-  return node;
-}
-
-// Voimakkuuskäyrä: nousu → vaimeneminen tasolle sus → (valinnainen) päästö
-function env(dest, t, a, peak, sus, decay, releaseAt, release) {
-  const g = ctx.createGain();
-  const p = g.gain;
-  p.setValueAtTime(0, t);
-  p.linearRampToValueAtTime(peak, t + a);
-  p.setTargetAtTime(sus, t + a, decay);
-  if (releaseAt != null) p.setTargetAtTime(0, Math.max(releaseAt, t + a), release);
-  if (dest) g.connect(dest);
-  return g;
-}
-
-function osc(type, f, t, end, dest, amp = 1, detune = 0) {
-  const o = ctx.createOscillator();
-  if (typeof type === 'string') o.type = type; else o.setPeriodicWave(type);
-  o.frequency.setValueAtTime(f, t);
-  o.detune.value = detune;
-  o.connect(amp === 1 ? dest : gainNode(amp, dest));
-  o.start(t);
-  o.stop(end);
-  return track(o);
-}
-
-function biquad(type, f, q, gain) {
-  const b = ctx.createBiquadFilter();
-  b.type = type;
-  b.frequency.value = f;
-  if (q != null) b.Q.value = q;
-  if (gain != null) b.gain.value = gain;
-  return b;
-}
-
-function filt(type, f, q, dest) {
-  const b = biquad(type, f, q);
-  b.connect(dest);
-  return b;
-}
-
-function chain(dest, ...nodes) {
-  for (let i = 0; i < nodes.length - 1; i++) nodes[i].connect(nodes[i + 1]);
-  nodes[nodes.length - 1].connect(dest);
-  return nodes[0];
-}
-
-function noise(t, end, dest, rate = 1) {
-  const s = ctx.createBufferSource();
-  s.buffer = noiseBuf;
-  s.loop = true;
-  s.playbackRate.value = rate;
-  s.connect(dest);
-  s.start(t, Math.random() * 1.5);
-  s.stop(end);
-  return track(s);
-}
-
-function lfo(rate, t, end, param, depth, delay = 0, type = 'sine') {
-  const l = ctx.createOscillator();
-  l.type = type;
-  l.frequency.value = rate;
-  const g = ctx.createGain();
-  g.gain.setValueAtTime(0, t);
-  g.gain.linearRampToValueAtTime(0, t + delay);
-  g.gain.linearRampToValueAtTime(depth, t + delay + .2);
-  l.connect(g);
-  g.connect(param);
-  l.start(t);
-  l.stop(end);
-  return track(l);
-}
-
-function vibrato(oscs, t, end, rate, cents, delay) {
-  oscs.forEach(o => lfo(rate, t, end, o.detune, cents, delay));
-}
-
-function playBuffer(buf, t, dest, rate = 1) {
-  const s = ctx.createBufferSource();
-  s.buffer = buf;
-  s.playbackRate.value = rate;
-  s.connect(dest);
-  s.start(t);
-  return track(s);
-}
-
-// Säröttävä waveshaper (tanh), käyrät välimuistissa
-const CURVES = new Map();
-function drive(k, dest) {
-  if (!CURVES.has(k)) {
-    const c = new Float32Array(1024);
-    for (let i = 0; i < 1024; i++) {
-      const x = i / 1023 * 2 - 1;
-      c[i] = Math.tanh(k * x) / Math.tanh(k);
-    }
-    CURVES.set(k, c);
-  }
-  const s = ctx.createWaveShaper();
-  s.curve = CURVES.get(k);
-  s.oversample = '2x';
-  if (dest) s.connect(dest);
-  return s;
-}
-
-const PW = {};
-function periodic(name, fill) {
-  if (!PW[name]) {
-    const N = 48, re = new Float32Array(N), im = new Float32Array(N);
-    fill(re, im, N);
-    PW[name] = ctx.createPeriodicWave(re, im);
-  }
-  return PW[name];
-}
-const harmonics = amps => (re, im) => amps.forEach((a, i) => { im[i + 1] = a; });
-const organWave = () => periodic('organ', harmonics([1, .9, .5, .6, 0, .3, 0, .25]));
-const fluteWave = () => periodic('flute', harmonics([1, .22, .08, .03, .01]));
+/* ════════════════════ Äänet: syntikat, rummut ja tehosteet (moottori: engine.js) ════════════════════ */
 
 /* ─── Ennalta lasketut äänet ─── */
 
@@ -372,8 +161,9 @@ const VOICES = {
     const lp = biquad('lowpass', 750, 2);
     chain(g, lp, drive(1.8));
     lfo(.35, t, end, lp.frequency, 450);
-    osc('sawtooth', f, t, end, lp, .5, -17);
-    osc('sawtooth', f, t, end, lp, .5, 17);
+    const [l, r] = wide(lp, .5);
+    osc('sawtooth', f, t, end, l, .5, -17);
+    osc('sawtooth', f, t, end, r, .5, 17);
     osc('sine', f / 2, t, end, g, .45);
   },
 
@@ -386,8 +176,8 @@ const VOICES = {
 
   rhodes(m, t, dur, out, v = 1) {
     const f = mtof(m), end = t + Math.max(dur, .4) + 1.2;
-    const trem = gainNode(1, out);
-    lfo(4.5, t, end, trem.gain, .15, .1);
+    const trem = panner(0, out);
+    if (trem.pan) lfo(4.2, t, end, trem.pan, .45, .05);
     const g = env(trem, t, .003, .42 * v, .12 * v, .9, t + Math.max(dur, .4), .25);
     const car = osc('sine', f, t, end, g);
     const mg = ctx.createGain();
@@ -404,14 +194,15 @@ const VOICES = {
     const g = env(out, t, .003, .7 * v, 0, .16);
     const lp = filt('lowpass', 2400, 3, g);
     lp.frequency.setTargetAtTime(500, t, .09);
-    [-9, 0, 9].forEach(d => osc('sawtooth', f, t, end, lp, .45, d));
+    const [l, r] = wide(lp, .5);
+    [-9, 0, 9].forEach((d, i) => osc('sawtooth', f, t, end, [l, lp, r][i], .45, d));
   },
 
   pad(m, t, dur, out, v = 1) {
     const f = mtof(m), end = t + dur + 1.6;
     const g = env(out, t, .3, .7 * v, .65 * v, .3, t + dur, .4);
-    const lp = filt('lowpass', 2600, .7, g);
-    [-16, -7, 0, 7, 16].forEach(d => osc('sawtooth', f, t, end, lp, .32, d));
+    const [l, r] = wide(filt('lowpass', 2600, .7, g), .8);
+    [-16, -7, 0, 7, 16].forEach((d, i) => osc('sawtooth', f, t, end, i % 2 ? r : l, .32, d));
   },
 
   darkpad(m, t, dur, out, v = 1) {
@@ -419,7 +210,8 @@ const VOICES = {
     const g = env(out, t, .5, .8 * v, .76 * v, .4, t + dur, .6);
     const lp = filt('lowpass', 800, 1.5, g);
     lfo(.12, t, end, lp.frequency, 350);
-    [-12, 0, 12].forEach(d => osc('sawtooth', f, t, end, lp, .4, d));
+    const [l, r] = wide(lp, .6);
+    [-12, 0, 12].forEach((d, i) => osc('sawtooth', f, t, end, i % 2 ? r : l, .4, d));
     osc('triangle', f / 2, t, end, g, .3);
   },
 
@@ -428,7 +220,8 @@ const VOICES = {
     const g = env(out, t, .35, 1.5 * v, 1.4 * v, .3, t + dur, .4);
     const mix = gainNode(1);
     [[800, 7, 1], [1150, 9, .6], [2900, 12, .25]].forEach(([ff, q, a]) => mix.connect(filt('bandpass', ff, q, gainNode(a * 2.5, g))));
-    const oscs = [-8, 0, 8].map(d => osc('sawtooth', f, t, end, mix, .4, d));
+    const [l, r] = wide(mix, .6);
+    const oscs = [-8, 0, 8].map((d, i) => osc('sawtooth', f, t, end, [l, mix, r][i], .4, d));
     vibrato(oscs, t, end, 5, 12, .3);
   },
 
@@ -437,8 +230,9 @@ const VOICES = {
     const g = env(out, t, .003, .55 * v, 0, .15);
     const lp = filt('lowpass', f * 8, 2, g);
     lp.frequency.setTargetAtTime(f * 1.5, t, .08);
-    osc('square', f, t, t + .9, lp, .5);
-    osc('sawtooth', f, t, t + .9, lp, .5, 8);
+    const [l, r] = wide(lp, .4);
+    osc('square', f, t, t + .9, l, .5);
+    osc('sawtooth', f, t, t + .9, r, .5, 8);
   },
 
   lead(m, t, dur, out, v = 1) {
@@ -448,7 +242,8 @@ const VOICES = {
     lp.frequency.setValueAtTime(f * 2, t);
     lp.frequency.linearRampToValueAtTime(Math.min(f * 12, 14000), t + .02);
     lp.frequency.setTargetAtTime(Math.min(f * 5, 9000), t + .03, .18);
-    const oscs = [-12, 0, 12].map(d => osc('sawtooth', f, t, end, lp, .42, d));
+    const [l, r] = wide(lp, .45);
+    const oscs = [-12, 0, 12].map((d, i) => osc('sawtooth', f, t, end, [l, lp, r][i], .42, d));
     vibrato(oscs, t, end, 5.5, 10, .3);
   },
 
@@ -457,7 +252,8 @@ const VOICES = {
     const g = env(out, t, .02, .3 * v, .26 * v, .2, t + dur, .1);
     const pre = gainNode(1);
     chain(g, pre, drive(2), biquad('lowpass', 3800, 1));
-    const oscs = [-35, -15, 0, 15, 35].map(d => osc('sawtooth', f, t, end, pre, .3, d));
+    const [l, r] = wide(pre, .6);
+    const oscs = [-35, -15, 0, 15, 35].map((d, i) => osc('sawtooth', f, t, end, [l, l, pre, r, r][i], .3, d));
     oscs.forEach(o => {                                              // hooverin tunnusomainen sävelnotkahdus
       o.detune.setValueAtTime(o.detune.value + 120, t);
       o.detune.linearRampToValueAtTime(o.detune.value - 90, t + .08);
@@ -473,14 +269,14 @@ const VOICES = {
   },
 
   bells(m, t, dur, out, v = 1) {
-    playBuffer(glockBuffer(m), t, env(out, t, .001, .45 * v, .45 * v, 1));
+    playBuffer(glockBuffer(m), t, env(panner(rand(-.35, .35), out), t, .001, .45 * v, .45 * v, 1));
   },
 
   piano(m, t, dur, out, v = 1) {
     const g = ctx.createGain();
     g.gain.setValueAtTime(.8 * v, t);
     g.gain.setTargetAtTime(0, t + Math.max(dur, .25) + .1, .12);
-    g.connect(out);
+    g.connect(panner(Math.max(-.5, Math.min(.5, (m - 62) / 50)), out));
     playBuffer(pianoBuffer(m), t, filt('lowpass', 2500 + 7000 * v, .5, g));
   },
 
@@ -535,11 +331,17 @@ const SUSTAINED = new Set(['sub', 'b808', 'b808x', 'acid', 'reese', 'organ', 'pa
 /* ─── Rummut: DRUMS[nimi](aika, voimakkuus, ulostulo, kesto, tapahtuma) ─── */
 
 function kick(t, v, out, f0, f1, sweep, decay, click, k) {
-  const g = env(out, t, .002, v, 0, decay);
+  const g = env(out, t, .0015, v, 0, decay);
   const dest = k ? drive(k, g) : g;
   const o = osc('sine', f0, t, t + decay * 8, dest);
   o.frequency.exponentialRampToValueAtTime(f1, t + sweep);
-  if (click) noise(t, t + .02, filt('highpass', 2500, .7, env(out, t, .001, click * v, 0, .004)));
+  // Punch: lyhyt yläsävel iskun alussa
+  const p = osc('sine', f0 * 1.5, t, t + .08, env(out, t, .001, .22 * v, 0, .014));
+  p.frequency.exponentialRampToValueAtTime(f1 * 2, t + .03);
+  if (click) {
+    noise(t, t + .02, filt('highpass', 2500, .7, env(out, t, .001, click * v, 0, .004)));
+    osc('sine', 2600, t, t + .012, env(out, t, .0005, click * .5 * v, 0, .0018));
+  }
 }
 
 // 808-tyylinen metallinen lähde hi-hateille ja rideille
@@ -547,17 +349,35 @@ function metal(t, decay, v, out, bp = 10000, hp = 7000) {
   const g = env(out, t, .001, v, 0, decay);
   const f = chain(g, biquad('bandpass', bp, .8), biquad('highpass', hp, .7));
   [205.3, 304.4, 369.6, 522.7, 540, 800].forEach(fr => osc('square', fr * 1.6, t, t + decay * 8 + .05, f, .3));
+  noise(t, t + decay * 8 + .05, filt('highpass', 9000, .7, gainNode(.35, g)));     // ilmaa ja sihinää
+  return g;
+}
+
+// Open hat katkeaa, kun closed hat soi (kuten oikeassa rumpukoneessa)
+let openHat = null;
+function chokeOpenHat(t) {
+  if (openHat && openHat.t < t) {
+    openHat.g.gain.cancelScheduledValues(t);
+    openHat.g.gain.setTargetAtTime(0, t, .008);
+    openHat = null;
+  }
 }
 
 function snare(t, v, out, hp, ndec, tone, tdec, nlev = .55) {
-  noise(t, t + ndec * 8, filt('highpass', hp, .7, env(out, t, .001, nlev * v, 0, ndec)));
-  const o = osc('triangle', tone, t, t + tdec * 8, env(out, t, .001, .45 * v, 0, tdec));
-  o.frequency.exponentialRampToValueAtTime(tone * .75, t + .08);
+  const nb = env(out, t, .001, nlev * v, 0, ndec);
+  noise(t, t + ndec * 8, chain(nb, biquad('highpass', hp, .7), biquad('peaking', 5000, 1, 4)));
+  // Kaksi kalvon värähtelymuotoa
+  [[tone, .45, 1], [tone * 1.62, .2, .7]].forEach(([f, a, k]) => {
+    const o = osc('triangle', f, t, t + tdec * 8, env(out, t, .001, a * v, 0, tdec * k));
+    o.frequency.exponentialRampToValueAtTime(f * .75, t + .08);
+  });
 }
 
 function clap(t, v = 1, f = 1150, out = master, tail = .07) {
-  [0, .011, .022].forEach((d, i) => {
-    noise(t + d, t + d + tail * 6, filt('bandpass', f, 1.3, env(out, t + d, .001, 1.3 * v, 0, i < 2 ? .008 : tail)));
+  [0, .009, .019, .029].forEach((d, i) => {
+    const last = i === 3;
+    const dest = panner(rand(-.25, .25), out);
+    noise(t + d, t + d + tail * 6 + .05, filt('bandpass', f * rand(.92, 1.08), 1.2, env(dest, t + d, .001, (last ? 1.3 : 1) * v, 0, last ? tail : .006)));
   });
 }
 
@@ -585,15 +405,15 @@ const DRUMS = {
     osc('square', 1700, t, t + .1, bp);
     osc('triangle', 460, t, t + .1, g, .6);
   },
-  hat(t, v, out) { metal(t, .035, .32 * v, out); },
-  hatO(t, v, out) { metal(t, .22, .26 * v, out); },
+  hat(t, v, out) { chokeOpenHat(t); metal(t, .035, .32 * v, out); },
+  hatO(t, v, out) { openHat = { g: metal(t, .22, .26 * v, out), t }; },
   ride(t, v, out) { metal(t, .5, .16 * v, out, 5200, 3500); },
   shaker(t, v, out) { noise(t, t + .2, filt('bandpass', 6500, 1, env(out, t, .012, .22 * v, 0, .035))); },
   tom(t, v, out) { kick(t, .7 * v, out, 190, 95, .25, .18, 0); },
   conga(t, v, out) { kick(t, .55 * v, out, 330, 250, .05, .12, .05); },
   snap(t, v, out) { noise(t, t + .1, filt('bandpass', 2600, 2, env(out, t, .001, .55 * v, 0, .012))); },
   crash(t, v, out) {
-    noise(t, t + 2.6, filt('highpass', 5000, .5, env(out, t, .001, .32 * v, 0, .55)));
+    [-.5, .5].forEach(p => noise(t, t + 2.6, filt('highpass', 5000, .5, env(panner(p, out), t, .001, .24 * v, 0, .55))));
     metal(t, .6, .1 * v, out, 6000, 4000);
   },
   cowbell(t, v, out, dur, e) { VOICES.cow(e && e.p ? e.p : 79, t, .1, out, v); },

@@ -1,9 +1,10 @@
 // Offline-tuki: sovellus toimii ilman verkkoa ensimmäisen käynnin jälkeen.
 // Vaihda versionumeroa, kun julkaiset muutoksia.
-const CACHE = 'biittipad-v4';
+const CACHE = 'biittipad-v5';
 const FILES = [
   './', './index.html', './style.css', './manifest.webmanifest', './icon.svg',
-  './js/audio.js', './js/vox.js', './js/genres.js', './js/sequencer.js', './js/visuals.js', './js/app.js',
+  './js/engine.js', './js/audio.js', './js/vox.js', './js/genres.js', './js/sequencer.js',
+  './js/recorder.js', './js/rec-worklet.js', './js/visuals.js', './js/studio.js', './js/app.js',
 ];
 
 self.addEventListener('install', e => {

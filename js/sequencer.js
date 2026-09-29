@@ -2,9 +2,10 @@
 /* ════════════════════ Sekvensseri, raidat ja DJ-efektit ════════════════════ */
 
 let genre = GENRE.phonk;
+let tempo = genre.bpm, swing = genre.swing, transpose = 0;
 const transport = { running: false, step: 0, next: 0, timer: 0 };
 const tracks = new Map();          // sarake → { loop, from, bus, queued }
-const bpm = () => genre.bpm;
+const bpm = () => tempo;
 const stepDur = () => 60 / bpm() / 4;
 const listeners = { beat: [], note: [], change: [] };
 const emit = (name, ...args) => listeners[name].forEach(fn => fn(...args));
@@ -59,6 +60,7 @@ function loopSteps(g, col, k) {
 
 function playEvent(e, loop, t, out, sd) {
   const len = e.d * sd * .95;
+  if (e.snd && e.p != null && transpose) e = Object.assign({}, e, { p: e.p + transpose });
   if (e.snd) {
     if (e.roll) for (let i = 0; i < e.roll; i++) DRUMS[e.snd](t + i * sd / e.roll, e.v * (i ? .7 : 1), out, len, e);
     else DRUMS[e.snd](t, e.v, out, len, e);
@@ -68,7 +70,9 @@ function playEvent(e, loop, t, out, sd) {
     FXS[e.fx](t, out, len);
   } else {
     const v = e.v / Math.sqrt(e.n.length);
-    e.n.forEach((n, i) => VOICES[loop.inst](n, t + (loop.inst === 'guitar' ? i * .025 : 0), len, out, v, e));
+    const tr = transpose;
+    const ev = tr && e.from != null ? Object.assign({}, e, { from: e.from + tr }) : e;
+    e.n.forEach((n, i) => VOICES[loop.inst](n + tr, t + (loop.inst === 'guitar' ? i * .025 : 0), len, out, v, ev));
   }
 }
 
@@ -76,7 +80,7 @@ function scheduleStep(step, t) {
   const pos = step % 64;
   const sd = stepDur();
   // Swing viivästää joka toista kuudestoistaosaa
-  const st = t + (pos % 2 ? genre.swing * sd : 0);
+  const st = t + (pos % 2 ? swing * sd : 0);
   if (step % 4 === 0) at(t, () => emit('beat', pos));
   for (const [col, tr] of tracks) {
     if (step < tr.from) continue;
@@ -102,8 +106,7 @@ function toggleLoop(col, k) {
   const tr = tracks.get(col);
   if (tr && tr.loop === k) { stopTrack(col); return; }
   if (tr) stopTrack(col, true);
-  const def = COLS.find(c => c.id === col);
-  const bus = gainNode(.85, def.bus === 'drums' ? FX.drumBus : FX.musicBus);
+  const bus = gainNode(.85, FX.strips[col].input);
   const loop = genre.cols[col][k];
   if (loop.send) bus.connect(gainNode(loop.send, FX.delayIn));
   let from = 0;
@@ -136,6 +139,8 @@ function setGenre(id) {
   if (genre.id === id) return;
   const playing = [...tracks.entries()].map(([c, tr]) => [c, tr.loop]);
   genre = GENRE[id];
+  tempo = genre.bpm;
+  swing = genre.swing;
   if (FX) setEchoTime();
   // Soivat silmukat jatkuvat samoissa paikoissa uuden tyylin äänillä
   if (playing.length && ctx) {
@@ -188,8 +193,20 @@ function holdRoll(play, grid = 2) {
 /* ─── DJ-efektit ─── */
 
 function setEchoTime() {
-  FX.delay.delayTime.setTargetAtTime(stepDur() * 3, ctx.currentTime, .05);   // pisteellinen kahdeksasosa
+  const now = ctx.currentTime;
+  FX.dL.delayTime.setTargetAtTime(stepDur() * 3, now, .05);     // pisteellinen kahdeksasosa, ping-pong
+  FX.dR.delayTime.setTargetAtTime(stepDur() * 3, now, .05);
+  if (FX.gateLfo) FX.gateLfo.frequency.setTargetAtTime(1 / (stepDur() * 2), now, .02);
 }
+
+function setTempo(v) {
+  tempo = Math.round(Math.max(60, Math.min(200, v)));
+  if (FX) setEchoTime();
+  emit('change');
+}
+
+function setSwing(v) { swing = Math.max(0, Math.min(.5, v)); emit('change'); }
+function setTranspose(v) { transpose = Math.max(-12, Math.min(12, v)); emit('change'); }
 
 // XY-suodin: x < .45 alipäästö, x > .55 ylipäästö, y = resonanssi
 function setFilter(x, y) {
@@ -224,13 +241,13 @@ function setGate(on) {
 function setEcho(on) {
   if (!audio()) return;
   setEchoTime();
-  FX.echoSend.gain.setTargetAtTime(on ? .55 : 0, ctx.currentTime, .02);
+  FX.echoThrow.gain.setTargetAtTime(on ? .6 : 0, ctx.currentTime, .02);
 }
 
 // BREAK: rummut pois niin kauan kuin nappia pidetään; päästettäessä ne palaavat seuraavalla iskulla ja räjähdyksellä
 function setBreak(on) {
   if (!audio()) return;
-  const g = FX.drumBus.gain, now = ctx.currentTime;
+  const g = FX.drumGroup.gain, now = ctx.currentTime;
   g.cancelScheduledValues(now);
   if (on) {
     g.setTargetAtTime(0, now, .02);
