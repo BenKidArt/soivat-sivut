@@ -1,14 +1,14 @@
 {
-  "name": "Soivat Sivut – lasten musiikkikirja",
-  "short_name": "Soivat Sivut",
-  "description": "Värikäs musiikkisovellus lapsille: soitinkirja, eläinbileiden launchpad ja arvauspeli.",
+  "name": "Biittipad – phonk, techno, house, trap, DnB, lo-fi",
+  "short_name": "Biittipad",
+  "description": "Tee biittejä koskettamalla: phonk, techno, house, trap, drum & bass ja lo-fi.",
   "lang": "fi",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
   "orientation": "any",
-  "background_color": "#12002a",
-  "theme_color": "#12002a",
+  "background_color": "#07000f",
+  "theme_color": "#07000f",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }

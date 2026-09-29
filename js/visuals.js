@@ -8,7 +8,7 @@ const bctx = bg.getContext('2d'), fctx = fx.getContext('2d');
 let W = 0, H = 0;
 let sunAngle = 0, sunBoost = 0, hueDrift = 0;
 const floaters = [], particles = [], ripples = [], tunnel = [];
-const SHAPES = ['note', 'note2', 'star', 'circle', 'ring', 'heart'];
+const SHAPES = ['tri', 'ring', 'circle', 'diamond', 'cross', 'star'];
 const MAX_PARTICLES = 700;
 
 function resize() {
@@ -45,19 +45,13 @@ function drawShape(c, shape, s) {
       }
       c.closePath(); c.fill(); break;
     }
-    case 'heart': {
-      const k = s * .045;
-      c.beginPath();
-      c.moveTo(0, 6 * k);
-      c.bezierCurveTo(-14 * k, -4 * k, -6 * k, -14 * k, 0, -6 * k);
-      c.bezierCurveTo(6 * k, -14 * k, 14 * k, -4 * k, 0, 6 * k);
-      c.fill(); break;
-    }
-    default:
-      c.font = `700 ${s * 1.6}px sans-serif`;
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      c.fillText(shape === 'note' ? '♪' : '♫', 0, 0);
+    case 'tri':
+      c.beginPath(); c.moveTo(0, -s * .7); c.lineTo(s * .62, s * .4); c.lineTo(-s * .62, s * .4); c.closePath(); c.fill(); break;
+    case 'diamond':
+      c.beginPath(); c.moveTo(0, -s * .75); c.lineTo(s * .45, 0); c.lineTo(0, s * .75); c.lineTo(-s * .45, 0); c.closePath(); c.fill(); break;
+    default:                                   // risti
+      c.fillRect(-s * .6, -s * .12, s * 1.2, s * .24);
+      c.fillRect(-s * .12, -s * .6, s * .24, s * 1.2);
   }
 }
 

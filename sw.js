@@ -1,9 +1,9 @@
 // Offline-tuki: sovellus toimii ilman verkkoa ensimmäisen käynnin jälkeen.
 // Vaihda versionumeroa, kun julkaiset muutoksia.
-const CACHE = 'soivat-sivut-v3';
+const CACHE = 'biittipad-v4';
 const FILES = [
   './', './index.html', './style.css', './manifest.webmanifest', './icon.svg',
-  './js/audio.js', './js/animals.js', './js/music.js', './js/visuals.js', './js/app.js',
+  './js/audio.js', './js/vox.js', './js/genres.js', './js/sequencer.js', './js/visuals.js', './js/app.js',
 ];
 
 self.addEventListener('install', e => {
